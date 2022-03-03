@@ -173,23 +173,62 @@ async function postProcessRenderedHTML(plugin: PandocPlugin, inputFile: string, 
     for (let span of Array.from(wrapper.querySelectorAll('span.internal-embed'))) {
         let src = span.getAttribute('src');
         if (src) {
-            const subfolder = inputFile.substring(adapter.getBasePath().length);  // TODO: this is messy
-            const file = plugin.app.metadataCache.getFirstLinkpathDest(src, subfolder);
+            const link_split = obsidian.parseLinktext(src);
+            console.log("src: " + src);
+            console.log("Link Path: " + link_split.path + ", Link Subpath:" + link_split.subpath);
+
+            const subfolder = inputFile.substring(adapter.getBasePath().length); // TODO: this is messy
+            const file = plugin.app.metadataCache.getFirstLinkpathDest(link_split.path, subfolder);
+
+            if(file)
+            {
+                console.log("File: " + file.path);
+            }
+            else
+            {
+                console.log("File " + link_split.path + " with subfolder " + subfolder + " returned null");
+            }
+
             try {
                 if (parentFiles.indexOf(file.path) !== -1) {
                     // We've got an infinite recursion on our hands
                     // We should replace the embed with a wikilink
                     // Then our link processing happens afterwards
                     span.outerHTML = `<a href="${file}">${span.innerHTML}</a>`;
-                } else {
-                    const markdown = await adapter.read(file.path);
+                }
+                else {
+                    let markdown = yield adapter.read(file.path);
+
+                    if(link_split.subpath)
+                    {
+                        const subpath_result = obsidian.resolveSubpath(plugin.app.metadataCache.getFileCache(file), link_split.subpath);
+                        console.log("Subpath type: " + subpath_result.type);
+
+                        if(subpath_result.type === "heading")
+                        {
+                            console.log("Start: " + subpath_result.current.position.start.line + "," + subpath_result.current.position.start.offset);
+                            console.log("next: " + subpath_result.next.position.start.line + "," + subpath_result.next.position.start.offset);
+                            // This will grab everything from the end of the selected heading (excluding the heading title!) to the start of the next heading)
+                            markdown = markdown.substring(subpath_result.current.position.end.offset, subpath_result.next.position.start.offset);
+                        }
+                        else
+                        {
+                            // Grab the whole block without excluding titles
+                            console.log("Block ID: " + subpath_result.block.id);
+                            markdown = markdown.substring(subpath_result.block.position.start.offset, subpath_result.block.position.end.offset);
+                        }
+
+                    }
+
+                    console.log("Returned data:" + markdown);
                     const newParentFiles = [...parentFiles];
                     newParentFiles.push(inputFile);
                     // TODO: because of this cast, embedded notes won't be able to handle complex plugins (eg DataView)
-                    const html = await render(plugin, { data: markdown } as MarkdownView, file.path, outputFormat, newParentFiles);
+                    const html = yield render(plugin, { data: markdown }, file.path, outputFormat, newParentFiles);
                     span.outerHTML = html.html;
                 }
-            } catch (e) {
+            }
+            catch (e) {
                 // Continue if it can't be loaded
                 console.error("Pandoc plugin encountered an error trying to load an embedded note: " + e.toString());
             }
