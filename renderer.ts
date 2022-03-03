@@ -11,7 +11,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as YAML from 'yaml';
 
-import { FileSystemAdapter, MarkdownRenderer, MarkdownView, Notice } from 'obsidian';
+import { FileSystemAdapter, MarkdownRenderer, MarkdownView, Notice, resolveSubpath, parseLinktext } from 'obsidian';
 
 import PandocPlugin from './main';
 import { PandocPluginSettings } from './global';
@@ -173,7 +173,7 @@ async function postProcessRenderedHTML(plugin: PandocPlugin, inputFile: string, 
     for (let span of Array.from(wrapper.querySelectorAll('span.internal-embed'))) {
         let src = span.getAttribute('src');
         if (src) {
-            const link_split = obsidian.parseLinktext(src);
+            const link_split = parseLinktext(src);
 
             const subfolder = inputFile.substring(adapter.getBasePath().length); // TODO: this is messy
             const file = plugin.app.metadataCache.getFirstLinkpathDest(link_split.path, subfolder);
@@ -190,7 +190,7 @@ async function postProcessRenderedHTML(plugin: PandocPlugin, inputFile: string, 
 
                     if(link_split.subpath)
                     {
-                        const subpath_result = obsidian.resolveSubpath(plugin.app.metadataCache.getFileCache(file), link_split.subpath);
+                        const subpath_result = resolveSubpath(plugin.app.metadataCache.getFileCache(file), link_split.subpath);
 
                         if(subpath_result.type === "heading")
                         {
