@@ -186,7 +186,7 @@ async function postProcessRenderedHTML(plugin: PandocPlugin, inputFile: string, 
                     span.outerHTML = `<a href="${file}">${span.innerHTML}</a>`;
                 }
                 else {
-                    let markdown = yield adapter.read(file.path);
+                    let markdown = await adapter.read(file.path);
 
                     if(link_split.subpath)
                     {
@@ -208,11 +208,10 @@ async function postProcessRenderedHTML(plugin: PandocPlugin, inputFile: string, 
                     const newParentFiles = [...parentFiles];
                     newParentFiles.push(inputFile);
                     // TODO: because of this cast, embedded notes won't be able to handle complex plugins (eg DataView)
-                    const html = yield render(plugin, { data: markdown }, file.path, outputFormat, newParentFiles);
+                    const html = await render(plugin, { data: markdown } as MarkdownView, file.path, outputFormat, newParentFiles);
                     span.outerHTML = html.html;
                 }
-            }
-            catch (e) {
+            } catch (e) {
                 // Continue if it can't be loaded
                 console.error("Pandoc plugin encountered an error trying to load an embedded note: " + e.toString());
             }
