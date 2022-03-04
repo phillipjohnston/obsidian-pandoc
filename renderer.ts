@@ -207,9 +207,17 @@ async function postProcessRenderedHTML(plugin: PandocPlugin, inputFile: string, 
                         if(subpath_result.type === "heading")
                         {
                             console.log("Start: " + subpath_result.current.position.start.line + "," + subpath_result.current.position.start.offset);
-                            console.log("next: " + subpath_result.next.position.start.line + "," + subpath_result.next.position.start.offset);
+                            if(subpath_result.next)
+                            {
+                                console.log("next: " + subpath_result.next.position.start.line + "," + subpath_result.next.position.start.offset);
+                            }
+                            else
+                            {
+                                console.log("next is null");
+                            }
                             // This will grab everything from the end of the selected heading (excluding the heading title!) to the start of the next heading)
-                            markdown = markdown.substring(subpath_result.current.position.end.offset, subpath_result.next.position.start.offset);
+                            let end_pos = subpath_result.next ? subpath_result.next.position.start.offset : markdown.length
+                            markdown = markdown.substring(subpath_result.current.position.end.offset, end_pos);
                         }
                         else
                         {
