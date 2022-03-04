@@ -174,20 +174,8 @@ async function postProcessRenderedHTML(plugin: PandocPlugin, inputFile: string, 
         let src = span.getAttribute('src');
         if (src) {
             const link_split = parseLinktext(src);
-            console.log("src: " + src);
-            console.log("Link Path: " + link_split.path + ", Link Subpath:" + link_split.subpath);
-
             const subfolder = inputFile.substring(adapter.getBasePath().length); // TODO: this is messy
             const file = plugin.app.metadataCache.getFirstLinkpathDest(link_split.path, subfolder);
-
-            if(file)
-            {
-                console.log("File: " + file.path);
-            }
-            else
-            {
-                console.log("File " + link_split.path + " with subfolder " + subfolder + " returned null");
-            }
 
             try {
                 if (parentFiles.indexOf(file.path) !== -1) {
@@ -202,19 +190,9 @@ async function postProcessRenderedHTML(plugin: PandocPlugin, inputFile: string, 
                     if(link_split.subpath)
                     {
                         const subpath_result = resolveSubpath(plugin.app.metadataCache.getFileCache(file), link_split.subpath);
-                        console.log("Subpath type: " + subpath_result.type);
 
                         if(subpath_result.type === "heading")
                         {
-                            console.log("Start: " + subpath_result.current.position.start.line + "," + subpath_result.current.position.start.offset);
-                            if(subpath_result.next)
-                            {
-                                console.log("next: " + subpath_result.next.position.start.line + "," + subpath_result.next.position.start.offset);
-                            }
-                            else
-                            {
-                                console.log("next is null");
-                            }
                             // This will grab everything from the end of the selected heading (excluding the heading title!) to the start of the next heading)
                             let end_pos = subpath_result.next ? subpath_result.next.position.start.offset : markdown.length
                             markdown = markdown.substring(subpath_result.current.position.end.offset, end_pos);
@@ -222,13 +200,11 @@ async function postProcessRenderedHTML(plugin: PandocPlugin, inputFile: string, 
                         else
                         {
                             // Grab the whole block without excluding titles
-                            console.log("Block ID: " + subpath_result.block.id);
                             markdown = markdown.substring(subpath_result.block.position.start.offset, subpath_result.block.position.end.offset);
                         }
 
                     }
 
-                    console.log("Returned data:" + markdown);
                     const newParentFiles = [...parentFiles];
                     newParentFiles.push(inputFile);
                     // TODO: because of this cast, embedded notes won't be able to handle complex plugins (eg DataView)
