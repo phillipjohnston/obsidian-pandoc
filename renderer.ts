@@ -11,7 +11,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as YAML from 'yaml';
 
-import { FileSystemAdapter, MarkdownRenderer, MarkdownView, Notice, resolveSubpath, parseLinktext } from 'obsidian';
+import { FileSystemAdapter, MarkdownRenderer, MarkdownView, Notice, resolveSubpath, parseLinktext, Component } from 'obsidian';
 
 import PandocPlugin from './main';
 import { PandocPluginSettings } from './global';
@@ -21,16 +21,21 @@ import { outputFormats } from 'pandoc';
 
 // Note: parentFiles is for internal use (to prevent recursively embedded notes)
 // inputFile must be an absolute file path
-export default async function render (plugin: PandocPlugin, view: MarkdownView,
+export default async function render (plugin: PandocPlugin, markdown: string,
     inputFile: string, outputFormat: string, parentFiles: string[] = []):
     Promise<{ html: string, metadata: { [index: string]: string } }>
 {
-    // Use Obsidian's markdown renderer to render to a hidden <div>
-    const markdown = view.data;
     const wrapper = document.createElement('div');
     wrapper.style.display = 'hidden';
     document.body.appendChild(wrapper);
-    await MarkdownRenderer.renderMarkdown(markdown, wrapper, path.dirname(inputFile), view);
+    console.log("Rendering markdown for inputFile:" + inputFile);
+
+    // I'm not sure how to make a MarkdownPostProcessorContext work here, which is what
+    // the admonition plugin requires. BUT the admonition ctx will not use addChild IF the
+    // type of the ctx value is a string. So an empty string works here to address that problem
+    // and renders admonitions again.
+    // Of course, this is not the proper fix.
+    await MarkdownRenderer.renderMarkdown(markdown, wrapper, path.dirname(inputFile), "");
 
     // Post-process the HTML in-place
     await postProcessRenderedHTML(plugin, inputFile, wrapper, outputFormat,
@@ -208,7 +213,7 @@ async function postProcessRenderedHTML(plugin: PandocPlugin, inputFile: string, 
                     const newParentFiles = [...parentFiles];
                     newParentFiles.push(inputFile);
                     // TODO: because of this cast, embedded notes won't be able to handle complex plugins (eg DataView)
-                    const html = await render(plugin, { data: markdown } as MarkdownView, file.path, outputFormat, newParentFiles);
+                    const html = await render(plugin, markdown, file.path, outputFormat, newParentFiles);
                     span.outerHTML = html.html;
                 }
             } catch (e) {

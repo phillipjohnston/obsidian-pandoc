@@ -97,14 +97,14 @@ export default class PandocPlugin extends Plugin {
         if (this.settings.outputFolder) {
             outputFile = path.join(this.settings.outputFolder, path.basename(outputFile));
         }
-        const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+        const markdown = (this.app.workspace.activeLeaf.view as any).data;
         
         try {
             let error, command;
 
             switch (this.settings.exportFrom) {
                 case 'html': {
-                    const { html, metadata } = await render(this, view, inputFile, format);
+                    const { html, metadata } = await render(this, markdown, inputFile, format);
 
                     if (format === 'html') {
                         // Write to HTML file
