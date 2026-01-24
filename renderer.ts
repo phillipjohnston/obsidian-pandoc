@@ -30,12 +30,12 @@ export default async function render (plugin: PandocPlugin, markdown: string,
     document.body.appendChild(wrapper);
     console.log("Rendering markdown for inputFile:" + inputFile);
 
-    // I'm not sure how to make a MarkdownPostProcessorContext work here, which is what
-    // the admonition plugin requires. BUT the admonition ctx will not use addChild IF the
-    // type of the ctx value is a string. So an empty string works here to address that problem
-    // and renders admonitions again.
-    // Of course, this is not the proper fix.
-    await MarkdownRenderer.renderMarkdown(markdown, wrapper, path.dirname(inputFile), "");
+    // Create a mock MarkdownPostProcessorContext
+    let mockCtx = {
+        addChild: (comp: Component) => comp
+    };
+
+    await MarkdownRenderer.renderMarkdown(markdown, wrapper, path.dirname(inputFile), mockCtx);
 
     // Post-process the HTML in-place
     await postProcessRenderedHTML(plugin, inputFile, wrapper, outputFormat,
