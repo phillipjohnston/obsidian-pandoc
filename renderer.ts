@@ -30,12 +30,11 @@ export default async function render (plugin: PandocPlugin, markdown: string,
     document.body.appendChild(wrapper);
     console.log("Rendering markdown for inputFile:" + inputFile);
 
-    // Create a mock MarkdownPostProcessorContext
-    let mockCtx = {
-        addChild: (comp: Component) => comp
-    };
+    // renderMarkdown requires a real Component to track event handlers and prevent memory leaks
+    const component = new Component();
+    plugin.registerChild(component);
 
-    await MarkdownRenderer.renderMarkdown(markdown, wrapper, path.dirname(inputFile), mockCtx);
+    await MarkdownRenderer.renderMarkdown(markdown, wrapper, path.dirname(inputFile), component);
 
     // Post-process the HTML in-place
     await postProcessRenderedHTML(plugin, inputFile, wrapper, outputFormat,
