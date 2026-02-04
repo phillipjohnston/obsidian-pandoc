@@ -32,7 +32,6 @@ export default async function render (plugin: PandocPlugin, markdown: string,
 
     // renderMarkdown requires a real Component to track event handlers and prevent memory leaks
     const component = new Component();
-    plugin.registerChild(component);
 
     await MarkdownRenderer.renderMarkdown(markdown, wrapper, path.dirname(inputFile), component);
 
@@ -40,6 +39,7 @@ export default async function render (plugin: PandocPlugin, markdown: string,
     await postProcessRenderedHTML(plugin, inputFile, wrapper, outputFormat,
         parentFiles, await mermaidCSS(plugin.settings, plugin.vaultBasePath()));
     let html = wrapper.innerHTML;
+    component.unload();
     document.body.removeChild(wrapper);
 
     // If it's a top level note, make the HTML a standalone document - inject CSS, a <title>, etc.
