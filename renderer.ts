@@ -59,6 +59,9 @@ function fileBaseName(file: string): string {
 }
 
 function getYAMLMetadata(markdown: string) {
+    if (!markdown) {
+        return {};
+    }
     markdown = markdown.trim();
     if (markdown.startsWith('---')) {
         const trailing = markdown.substring(3);
