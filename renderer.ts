@@ -33,7 +33,13 @@ export default async function render (plugin: PandocPlugin, markdown: string,
     // renderMarkdown requires a real Component to track event handlers and prevent memory leaks
     const component = new Component();
 
-    await MarkdownRenderer.renderMarkdown(markdown, wrapper, path.dirname(inputFile), component);
+    try {
+        await MarkdownRenderer.renderMarkdown(markdown, wrapper, path.dirname(inputFile), component);
+    } catch (e) {
+        // A third-party plugin's post-processor threw during renderMarkdown.
+        // Log and continue — the HTML rendered so far is still usable.
+        console.warn('Pandoc plugin: renderMarkdown threw (likely a third-party post-processor bug):', e);
+    }
 
     // Post-process the HTML in-place
     await postProcessRenderedHTML(plugin, inputFile, wrapper, outputFormat,
