@@ -17,7 +17,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { spawn } from 'child_process';
 import * as YAML from 'yaml';
-import { FileSystemAdapter, TFile } from 'obsidian';
+import { FileSystemAdapter, Notice, TFile } from 'obsidian';
 
 import PandocPlugin from './main';
 import render from './renderer';
@@ -26,9 +26,10 @@ import { TRANSFORM_REGISTRY } from './publication-transforms';
 
 // ── Git helpers ───────────────────────────────────────────────────────────────
 
-function spawnGit(args: string[], cwd: string): Promise<{ stdout: string; stderr: string }> {
+function spawnGit(args: string[], cwd: string, extraEnv: Record<string, string> = {}): Promise<{ stdout: string; stderr: string }> {
     return new Promise((resolve, reject) => {
-        const proc = spawn('git', args, { cwd, env: process.env });
+        const env = Object.assign({}, process.env, extraEnv);
+        const proc = spawn('git', args, { cwd, env });
         let stdout = '';
         let stderr = '';
         proc.stdout.on('data', (d: Buffer) => stdout += d.toString());
@@ -42,6 +43,17 @@ function spawnGit(args: string[], cwd: string): Promise<{ stdout: string; stderr
         });
         proc.on('error', reject);
     });
+}
+
+const SUBLIME_PATH = '/usr/local/bin/subl';
+
+async function sublimeIsAvailable(): Promise<boolean> {
+    try {
+        await fs.promises.access(SUBLIME_PATH, fs.constants.X_OK);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 // ── Front matter helpers ──────────────────────────────────────────────────────
@@ -178,20 +190,37 @@ export async function publishNote(
     // 11. git pull to get latest before overwriting
     await spawnGit(['pull'], repoDir);
 
-    // 12. Prepend YAML front matter from source note to the HTML body
-    const sourceFrontMatterBlock = extractFrontMatterBlock(markdown);
-    const outputContent = sourceFrontMatterBlock
-        ? sourceFrontMatterBlock + '\n' + html
+    // 12. Preserve existing front matter from the output file in the repo.
+    // The repo file has its own metadata (ID, post_title, layout, etc.) that
+    // must not be overwritten. We read it, keep its front matter, and replace
+    // only the HTML body that follows it.
+    let existingFrontMatterBlock = '';
+    try {
+        const existing = await fs.promises.readFile(outputFile, 'utf8');
+        existingFrontMatterBlock = extractFrontMatterBlock(existing);
+    } catch {
+        // File doesn't exist yet — no existing front matter to preserve
+    }
+
+    const outputContent = existingFrontMatterBlock
+        ? existingFrontMatterBlock + '\n' + html
         : html;
 
     // 13. Write output file
     await fs.promises.mkdir(path.dirname(outputFile), { recursive: true });
     await fs.promises.writeFile(outputFile, outputContent, 'utf8');
 
-    // 14. Git commit and push
-    const noteTitle = frontMatter['title'] || path.basename(inputFile, path.extname(inputFile));
+    // 14. Git commit (opens Sublime Text for review) and push
     await spawnGit(['add', filepath], repoDir);
-    await spawnGit(['commit', '-m', `Publish: ${noteTitle}`], repoDir);
+    if (!await sublimeIsAvailable()) {
+        new Notice(
+            `Publish: file written and staged in ${repoDir}, but Sublime Text was not found at ${SUBLIME_PATH}. ` +
+            `Please commit manually.`,
+            20000
+        );
+        return;
+    }
+    await spawnGit(['commit', '-v'], repoDir, { GIT_EDITOR: `${SUBLIME_PATH} -w` });
     await spawnGit(['push'], repoDir);
 
     // 15. Update source note front matter
