@@ -18,7 +18,8 @@ import * as temp from 'temp';
 
 import render from './renderer';
 import PandocPluginSettingTab from './settings';
-import { PandocPluginSettings, DEFAULT_SETTINGS, replaceFileExtension } from './global';
+import { PandocPluginSettings, DEFAULT_SETTINGS, replaceFileExtension, PublicationProfile } from './global';
+import { publishNote } from './publisher';
 export default class PandocPlugin extends Plugin {
     settings: PandocPluginSettings;
     features: { [key: string]: string | undefined } = {};
@@ -32,6 +33,7 @@ export default class PandocPlugin extends Plugin {
 
         // Register all of the command palette entries
         this.registerCommands();
+        this.registerPublicationCommands();
 
         this.addSettingTab(new PandocPluginSettingTab(this.app, this));
     }
@@ -51,6 +53,37 @@ export default class PandocPlugin extends Plugin {
                     return true;
                 }
             });
+        }
+    }
+
+    registerPublicationCommands() {
+        for (const profile of this.settings.publication.profiles) {
+            const capturedProfile = profile; // capture for closure
+            this.addCommand({
+                id: 'pandoc-publish-' + capturedProfile.id,
+                name: 'Publish to ' + capturedProfile.name,
+                checkCallback: (checking: boolean) => {
+                    if (!this.app.workspace.activeLeaf) return false;
+                    const file = this.getCurrentFile();
+                    if (!file) return false;
+                    if (!checking) {
+                        this.startPublish(file, capturedProfile);
+                    }
+                    return true;
+                }
+            });
+        }
+    }
+
+    async startPublish(inputFile: string, profile: PublicationProfile) {
+        const markdown = (this.app.workspace.activeLeaf.view as any).data;
+        new Notice(`Publishing to ${profile.name}...`);
+        try {
+            await publishNote(this, inputFile, markdown, profile);
+            new Notice(`Successfully published to ${profile.name}`);
+        } catch (e) {
+            new Notice('Publish failed: ' + e.toString(), 15000);
+            console.error(e);
         }
     }
 

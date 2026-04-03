@@ -8,6 +8,8 @@
 
 import { App, PluginSettingTab, Setting } from 'obsidian';
 import PandocPlugin from './main';
+import { TransformId } from './global';
+import { TRANSFORM_REGISTRY } from './publication-transforms';
 
 export default class PandocPluginSettingTab extends PluginSettingTab {
     plugin: PandocPlugin;
@@ -150,5 +152,72 @@ export default class PandocPluginSettingTab extends PluginSettingTab {
                     await this.plugin.saveSettings();
                 })
                 .inputEl.style.minHeight='150px');
+
+        // ── Publication profiles ──────────────────────────────────────────────
+
+        containerEl.createEl('h3', { text: 'Publication Profiles' });
+        containerEl.createEl('p', {
+            text: 'Configure publication targets for the "Publish to..." commands. ' +
+                  'Each profile maps to a git repository and controls which HTML transforms are applied. ' +
+                  'Adding or removing profiles requires reloading the plugin to update the command palette.',
+            cls: 'setting-item-description',
+        });
+
+        for (let i = 0; i < this.plugin.settings.publication.profiles.length; i++) {
+            const profile = this.plugin.settings.publication.profiles[i];
+
+            containerEl.createEl('h4', { text: profile.name });
+
+            new Setting(containerEl)
+                .setName("Profile name")
+                .setDesc("Display name used in the command palette (e.g. \"WordPress\", \"Personal Site\").")
+                .addText(text => text
+                    .setValue(profile.name)
+                    .onChange(async (value: string) => {
+                        this.plugin.settings.publication.profiles[i].name = value;
+                        await this.plugin.saveSettings();
+                    }));
+
+            new Setting(containerEl)
+                .setName("Git repositories base path")
+                .setDesc("Absolute path to the folder containing your git repositories. The 'repository' front matter field is appended to this path. Use ~ for home directory.")
+                .addText(text => text
+                    .setPlaceholder('~/src')
+                    .setValue(profile.gitReposBasePath)
+                    .onChange(async (value: string) => {
+                        this.plugin.settings.publication.profiles[i].gitReposBasePath = value;
+                        await this.plugin.saveSettings();
+                    }));
+
+            containerEl.createEl('p', {
+                text: 'Custom transforms: place a custom-transforms.js file at ' +
+                      '.obsidian/plugins/obsidian-pandoc/custom-transforms.js in your vault. ' +
+                      'It should export functions with signature (html: string) => string.',
+                cls: 'setting-item-description',
+            });
+
+            containerEl.createEl('p', {
+                text: 'Enabled transforms (applied in order):',
+                cls: 'setting-item-description',
+            });
+
+            for (const transform of TRANSFORM_REGISTRY) {
+                new Setting(containerEl)
+                    .setName(transform.label)
+                    .setDesc(transform.description)
+                    .addToggle(toggle => toggle
+                        .setValue(profile.enabledTransforms.includes(transform.id))
+                        .onChange(async (value: boolean) => {
+                            const current = this.plugin.settings.publication.profiles[i].enabledTransforms;
+                            if (value && !current.includes(transform.id)) {
+                                current.push(transform.id);
+                            } else if (!value) {
+                                this.plugin.settings.publication.profiles[i].enabledTransforms =
+                                    current.filter((id: TransformId) => id !== transform.id);
+                            }
+                            await this.plugin.saveSettings();
+                        }));
+            }
+        }
     }
 }

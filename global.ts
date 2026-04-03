@@ -1,6 +1,56 @@
 
 import * as fs from 'fs';
 
+export type TransformId =
+    | 'removeDirAuto'
+    | 'stripExternalLinkAttributes'
+    | 'stripAdmonitionSVGIcons'
+    | 'normalizeCodeBlockClasses'
+    | 'stripSyntaxHighlightSpans'
+    | 'removeCopyCodeButtons'
+    | 'convertOrbitBlocks'
+    | 'normalizeHeadingIds'
+    | 'convertObsidianAnchorLinks'
+    | 'removeDoubledParagraphs'
+    | 'removeAdmonitionStyles'
+    | 'convertWordPressShortcodes'
+    | 'convertReusableBlocks'
+    | 'convertWordPressBlocks'
+    | 'removeTooltipAttributes'
+    | 'convertCollapsibleBlocks'
+    | 'removeAriaLabels';
+
+export const ALL_TRANSFORM_IDS: TransformId[] = [
+    'removeDirAuto',
+    'stripExternalLinkAttributes',
+    'stripAdmonitionSVGIcons',
+    'normalizeCodeBlockClasses',
+    'stripSyntaxHighlightSpans',
+    'removeCopyCodeButtons',
+    'convertOrbitBlocks',
+    'normalizeHeadingIds',
+    'convertObsidianAnchorLinks',
+    'removeDoubledParagraphs',
+    'removeAdmonitionStyles',
+    'convertWordPressShortcodes',
+    'convertReusableBlocks',
+    'convertWordPressBlocks',
+    'removeTooltipAttributes',
+    'convertCollapsibleBlocks',
+    'removeAriaLabels',
+];
+
+export interface PublicationProfile {
+    id: string;
+    name: string;
+    enabledTransforms: TransformId[];
+    gitReposBasePath: string;
+}
+
+export interface PublicationSettings {
+    profiles: PublicationProfile[];
+}
+
 export interface PandocPluginSettings {
     // Show a command like `pandoc -o Output.html -t html -f commonmark Input.md`
     //  in the UI as an example of how to do something similar in the terminal
@@ -30,6 +80,8 @@ export interface PandocPluginSettings {
     extraArguments: string,
     // Export from HTML or from markdown?
     exportFrom: 'html' | 'md',
+    // Publication profiles for the publish pipeline
+    publication: PublicationSettings,
 }
 
 export const DEFAULT_SETTINGS: PandocPluginSettings = {
@@ -46,6 +98,16 @@ export const DEFAULT_SETTINGS: PandocPluginSettings = {
     outputFolder: null,
     extraArguments: '',
     exportFrom: 'html',
+    publication: {
+        profiles: [
+            {
+                id: 'wordpress',
+                name: 'WordPress',
+                enabledTransforms: ALL_TRANSFORM_IDS.slice(),
+                gitReposBasePath: '~/src',
+            }
+        ]
+    },
 }
 
 export function replaceFileExtension(file: string, ext: string): string {
