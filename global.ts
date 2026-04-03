@@ -18,8 +18,7 @@ export type TransformId =
     | 'convertWordPressBlocks'
     | 'removeTooltipAttributes'
     | 'convertCollapsibleBlocks'
-    | 'removeAriaLabels'
-    | 'normalizeNbsp';
+    | 'removeAriaLabels';
 
 export const ALL_TRANSFORM_IDS: TransformId[] = [
     'removeDirAuto',
@@ -39,7 +38,6 @@ export const ALL_TRANSFORM_IDS: TransformId[] = [
     'removeTooltipAttributes',
     'convertCollapsibleBlocks',
     'removeAriaLabels',
-    'normalizeNbsp',
 ];
 
 export interface PublicationProfile {

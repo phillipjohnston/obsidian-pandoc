@@ -221,31 +221,6 @@ function convertCollapsibleBlocks(body: HTMLElement): void {
     });
 }
 
-function normalizeNbsp(body: HTMLElement): void {
-    // The browser's innerHTML serializer inserts &nbsp; at boundaries between
-    // inline elements and adjacent text (e.g. <a>text</a>&nbsp;follows or
-    // <code>x</code>&nbsp;– note). Replace with regular spaces everywhere
-    // except inside <pre> blocks, where whitespace is significant.
-    const walker = document.createTreeWalker(body, NodeFilter.SHOW_TEXT);
-    const textNodes: Text[] = [];
-    let node: Text;
-    while ((node = walker.nextNode() as Text)) {
-        textNodes.push(node);
-    }
-    for (const textNode of textNodes) {
-        // Skip text nodes inside <pre> elements
-        let parent: Node | null = textNode.parentNode;
-        let inPre = false;
-        while (parent && parent !== body) {
-            if ((parent as Element).tagName === 'PRE') { inPre = true; break; }
-            parent = parent.parentNode;
-        }
-        if (!inPre && textNode.nodeValue?.includes('\u00a0')) {
-            textNode.nodeValue = textNode.nodeValue.replace(/\u00a0/g, ' ');
-        }
-    }
-}
-
 // ── String transforms ─────────────────────────────────────────────────────────
 // These handle WordPress block comment syntax (<!-- wp:... -->) which doesn't
 // survive DOM serialization cleanly.
@@ -411,12 +386,5 @@ export const TRANSFORM_REGISTRY: TransformDefinition[] = [
         description: 'Converts language-wordpress pre/code blocks to raw WordPress block HTML, unescaping entities and stripping <p> wrappers around block comments.',
         phase: 'string',
         stringFn: convertWordPressBlocks,
-    },
-    {
-        id: 'normalizeNbsp',
-        label: 'Replace non-breaking spaces with regular spaces',
-        description: 'Removes &nbsp; characters inserted by the browser serializer at boundaries between inline elements and text (e.g. after </a> or </code>). Skips <pre> blocks.',
-        phase: 'dom',
-        domFn: normalizeNbsp,
     },
 ];
