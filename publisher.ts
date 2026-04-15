@@ -111,15 +111,14 @@ async function loadCustomTransforms(vaultBasePath: string): Promise<Array<(html:
     }
 }
 
-// ── Core publication function ─────────────────────────────────────────────────
+// ── Shared render + transform pipeline ───────────────────────────────────────
 
-export async function publishNote(
+async function renderAndTransform(
     plugin: PandocPlugin,
     inputFile: string,
     markdown: string,
     profile: PublicationProfile
-): Promise<void> {
-
+): Promise<string> {
     // 1. Render to standalone HTML using the existing render pipeline
     const { html: standaloneHTML } = await render(plugin, markdown, inputFile, 'html');
 
@@ -166,6 +165,33 @@ export async function publishNote(
             console.warn('Pandoc plugin: custom transform threw:', e);
         }
     }
+
+    return html;
+}
+
+// ── Clipboard copy function ───────────────────────────────────────────────────
+
+export async function copyNoteToClipboard(
+    plugin: PandocPlugin,
+    inputFile: string,
+    markdown: string,
+    profile: PublicationProfile
+): Promise<void> {
+    const html = await renderAndTransform(plugin, inputFile, markdown, profile);
+    await navigator.clipboard.writeText(html);
+}
+
+// ── Core publication function ─────────────────────────────────────────────────
+
+export async function publishNote(
+    plugin: PandocPlugin,
+    inputFile: string,
+    markdown: string,
+    profile: PublicationProfile
+): Promise<void> {
+
+    // 1–7. Render HTML and run all transforms
+    let html = await renderAndTransform(plugin, inputFile, markdown, profile);
 
     // 8. Read front matter fields from source note
     const frontMatter = parseFrontMatter(markdown);
