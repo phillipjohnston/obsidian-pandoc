@@ -229,8 +229,8 @@ export async function publishNote(
     }
 
     const outputContent = existingFrontMatterBlock
-        ? existingFrontMatterBlock + '\n' + html
-        : html;
+        ? existingFrontMatterBlock + '\n' + html.trimStart()
+        : html.trimStart();
 
     // 13. Write output file
     await fs.promises.mkdir(path.dirname(outputFile), { recursive: true });

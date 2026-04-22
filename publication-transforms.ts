@@ -187,38 +187,83 @@ function removeAriaLabels(body: HTMLElement): void {
 }
 
 function convertCollapsibleBlocks(body: HTMLElement): void {
-    // Collapsible blocks are written as:
-    //   <pre><code>collapsible "Title" h2 extra-attrs
-    //   content
-    //   end-collapsible</code></pre>
-    // Convert to <details extra-attrs><summary><h2>Title</h2></summary>content</details>
-    body.querySelectorAll('pre > code').forEach(code => {
-        const text = code.textContent || '';
-        const match = text.match(/^collapsible "(.*?)" h(\d+)(.*?)\n([\s\S]*?)\nend-collapsible$/);
-        if (!match) return;
-        const [, title, level, attrs, content] = match;
-        const pre = code.parentElement as HTMLPreElement;
+    // Obsidian renders the collapsible syntax as separate sibling elements:
+    //   <pre><code>collapsible "Title" hN extra-attrs</code></pre>
+    //   ...arbitrary rendered HTML siblings...
+    //   <pre><code>end-collapsible</code></pre>
+    // Convert to: <details extra-attrs><summary><hN>Title</hN></summary>...content...</details>
+    //
+    // We scan all pre>code elements, identify opening markers, collect siblings
+    // until the matching end-collapsible, then replace the whole range.
+    const openingPattern = /^collapsible "(.*?)" h(\d+)(.*?)$/;
+
+    // Collect openers first (querySelectorAll snapshot is safe to mutate against)
+    const candidates = Array.from(body.querySelectorAll('pre > code'));
+    for (const code of candidates) {
+        const text = (code.textContent || '').trim();
+        const match = text.match(openingPattern);
+        if (!match) continue;
+
+        const [, title, level, attrs] = match;
+        const openPre = code.parentElement as HTMLPreElement;
+        const parent = openPre.parentNode;
+        if (!parent) continue;
+
+        // Walk forward through siblings to find the end-collapsible marker
+        const contentNodes: Node[] = [];
+        let closePre: Element | null = null;
+        let sibling: Node | null = openPre.nextSibling;
+        while (sibling) {
+            const next: Node | null = sibling.nextSibling;
+            if (
+                sibling.nodeType === Node.ELEMENT_NODE &&
+                (sibling as Element).matches('pre') &&
+                ((sibling as Element).querySelector('code')?.textContent || '').trim() === 'end-collapsible'
+            ) {
+                closePre = sibling as Element;
+                break;
+            }
+            contentNodes.push(sibling);
+            sibling = next;
+        }
+
+        if (!closePre) continue; // No matching end-collapsible found — skip
 
         const details = document.createElement('details');
         if (attrs.trim()) {
-            // attrs is a space-separated list of attribute string fragments
-            details.setAttribute('data-collapsible-attrs', attrs.trim());
+            // Parse simple key=value or bare attribute fragments from the extra-attrs string
+            const attrStr = attrs.trim();
+            // Use a temporary element to let the browser parse the attributes
+            const tmp = document.createElement('div');
+            try {
+                tmp.innerHTML = `<span ${attrStr}></span>`;
+                const parsed = tmp.firstElementChild;
+                if (parsed) {
+                    for (const attr of Array.from(parsed.attributes)) {
+                        details.setAttribute(attr.name, attr.value);
+                    }
+                }
+            } catch {
+                // Fallback: set as a raw data attribute so nothing is lost
+                details.setAttribute('data-collapsible-attrs', attrStr);
+            }
         }
+
         const summary = document.createElement('summary');
         const heading = document.createElement(`h${level}`);
         heading.textContent = title;
         summary.appendChild(heading);
         details.appendChild(summary);
 
-        // Inner content is HTML — create a temp div to parse it
-        const contentDiv = document.createElement('div');
-        contentDiv.innerHTML = content;
-        while (contentDiv.firstChild) {
-            details.appendChild(contentDiv.firstChild);
+        for (const node of contentNodes) {
+            details.appendChild(node);
         }
 
-        pre.parentNode?.replaceChild(details, pre);
-    });
+        // Replace the opening <pre> with the <details> element
+        parent.replaceChild(details, openPre);
+        // Remove the closing <pre>
+        closePre.remove();
+    }
 }
 
 // ── String transforms ─────────────────────────────────────────────────────────
@@ -256,6 +301,9 @@ function convertWordPressBlocks(html: string): string {
     html = html.replace(/<p>(<!-- wp:)/gms, '$1');
     // Strip </p> wrapper after closing WP block comments
     html = html.replace(/(<!-- \/wp:.*?-->)<\/p>/gms, '$1');
+    // Remove empty <p></p> tags left adjacent to WP block comments
+    html = html.replace(/<p><\/p>(<!-- wp:)/gms, '$1');
+    html = html.replace(/(<!-- \/wp:.*?-->)<p><\/p>/gms, '$1');
     // Fix escaped < and > inside wp blocks (two passes for nested blocks)
     const fixWpEntities = (s: string) =>
         s.replace(/(<!-- wp:[\s\S]*?)(<!-- \/wp:)/gms, (_m, inner, closing) =>
@@ -362,7 +410,7 @@ export const TRANSFORM_REGISTRY: TransformDefinition[] = [
     {
         id: 'convertCollapsibleBlocks',
         label: 'Convert collapsible blocks',
-        description: 'Converts collapsible "Title" hN ... end-collapsible pre/code blocks to <details><summary> HTML.',
+        description: 'Converts collapsible "Title" hN ... end-collapsible sibling pre/code marker blocks (with arbitrary HTML content between them) to <details><summary><hN> HTML.',
         phase: 'dom',
         domFn: convertCollapsibleBlocks,
     },
