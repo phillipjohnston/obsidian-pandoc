@@ -270,16 +270,34 @@ function convertCollapsibleBlocks(body: HTMLElement): void {
 // These handle WordPress block comment syntax (<!-- wp:... -->) which doesn't
 // survive DOM serialization cleanly.
 
+/**
+ * Reverse the escaping that innerHTML serialization applies to the text of a
+ * <code> element, so the fence's source text comes out exactly as authored.
+ *
+ * Serialization escapes &, <, > (and " in some engines). Decoding must happen in
+ * a single pass: decoding &lt;/&gt; and then &amp; separately would turn an
+ * authored "&amp;lt;" into "<". U+00A0 serializes as &nbsp;, which is left alone
+ * because it is already the correct entity for WordPress output.
+ *
+ * Previously only &lt;/&gt; were decoded, so an authored "&amp;" was published
+ * as "&amp;amp;" and "&nbsp;" as "&amp;nbsp;" (broken image URLs, visible
+ * "&nbsp;" text, and failed oEmbeds).
+ */
+export function decodeCodeText(s: string): string {
+    const map: Record<string, string> = { amp: '&', lt: '<', gt: '>', quot: '"', '#39': "'" };
+    return s.replace(/&(amp|lt|gt|quot|#39);/g, (_m, e: string) => map[e]);
+}
+
 function convertWordPressShortcodes(html: string): string {
     // language-shortcode with {"kioblocks":[]} variant
     html = html.replace(
         /<pre class="language-shortcode"[^>]*><code[^>]*>&lt;!-- wp:shortcode \{"kioblocks":\[\]\} --&gt;([\s\S]*?)&lt;!-- \/wp:shortcode --&gt;\n<\/code>.*?<\/pre>/gms,
-        '<!-- wp:shortcode {"kioblocks":[]} -->$1<!-- /wp:shortcode -->'
+        (_m, content) => '<!-- wp:shortcode {"kioblocks":[]} -->' + decodeCodeText(content) + '<!-- /wp:shortcode -->'
     );
     // plain language-shortcode
     html = html.replace(
         /<pre class="language-shortcode"[^>]*><code[^>]*>&lt;!-- wp:shortcode --&gt;([\s\S]*?)&lt;!-- \/wp:shortcode --&gt;\n<\/code>.*?<\/pre>/gms,
-        '<!-- wp:shortcode -->$1<!-- /wp:shortcode -->'
+        (_m, content) => '<!-- wp:shortcode -->' + decodeCodeText(content) + '<!-- /wp:shortcode -->'
     );
     return html;
 }
@@ -287,7 +305,7 @@ function convertWordPressShortcodes(html: string): string {
 function convertReusableBlocks(html: string): string {
     return html.replace(
         /<pre class="language-reusable-block"[^>]*><code[^>]*>&lt;!--([\s\S]*?)--&gt;\n<\/code><\/pre>/gms,
-        '<!--$1-->'
+        (_m, content) => '<!--' + decodeCodeText(content) + '-->'
     );
 }
 
@@ -295,7 +313,7 @@ function convertWordPressBlocks(html: string): string {
     // Convert language-wordpress pre/code blocks to raw WordPress block HTML
     html = html.replace(
         /<pre class="language-wordpress"[^>]*><code[^>]*>([\s\S]*?)\n<\/code><\/pre>/gms,
-        (_match, content) => content.replace(/&lt;/g, '<').replace(/&gt;/g, '>')
+        (_match, content) => decodeCodeText(content)
     );
     // Strip <p> wrapper before opening WP block comments
     html = html.replace(/<p>(<!-- wp:)/gms, '$1');
@@ -311,6 +329,61 @@ function convertWordPressBlocks(html: string): string {
         );
     html = fixWpEntities(fixWpEntities(html));
     return html;
+}
+
+// ── Validation ────────────────────────────────────────────────────────────────
+
+/**
+ * Check final publication HTML for WordPress problems that are otherwise only
+ * discovered after the page renders badly on the site. Returns human-readable
+ * warnings; an empty array means nothing suspicious was found.
+ */
+export function validateWordPressHTML(html: string): string[] {
+    const warnings: string[] = [];
+
+    const doubled = html.match(/&amp;(?:amp|nbsp|lt|gt|quot|#\d+|#x[0-9a-f]+);/gi);
+    if (doubled) {
+        const sample = Array.from(new Set(doubled)).slice(0, 3).join(', ');
+        warnings.push(`${doubled.length} double-encoded entities (e.g. ${sample})`);
+    }
+
+    const unconverted = html.match(/<pre class="language-(?:wordpress|shortcode|reusable-block)\b/g);
+    if (unconverted) {
+        warnings.push(`${unconverted.length} WordPress code fence(s) were not converted and will render as code`);
+    }
+
+    // Block comment balance and attribute JSON validity
+    const stack: string[] = [];
+    const blockRe = /<!--\s+(\/)?wp:([a-z0-9\/-]+)(?:\s+(\{[\s\S]*?\}))?\s*(\/)?-->/g;
+    let m: RegExpExecArray | null;
+    while ((m = blockRe.exec(html)) !== null) {
+        const [, closing, name, attrs, selfClosing] = m;
+        if (attrs) {
+            try {
+                const parsed = JSON.parse(attrs);
+                if (name === 'embed' && typeof parsed.url === 'string' && parsed.url.includes('&amp;')) {
+                    warnings.push(`wp:embed url contains "&amp;" and will likely fall back to a plain link: ${parsed.url}`);
+                }
+            } catch {
+                warnings.push(`wp:${name} has invalid JSON attributes: ${attrs.slice(0, 80)}`);
+            }
+        }
+        if (selfClosing) continue;
+        if (!closing) {
+            stack.push(name);
+        } else if (stack.length && stack[stack.length - 1] === name) {
+            stack.pop();
+        } else {
+            warnings.push(`Unexpected <!-- /wp:${name} -->` + (stack.length ? ` (expected /wp:${stack[stack.length - 1]})` : ''));
+            const idx = stack.lastIndexOf(name);
+            if (idx !== -1) stack.length = idx;
+        }
+    }
+    if (stack.length) {
+        warnings.push(`Unclosed WordPress block(s): ${stack.map(n => 'wp:' + n).join(', ')}`);
+    }
+
+    return warnings;
 }
 
 // ── Registry ──────────────────────────────────────────────────────────────────

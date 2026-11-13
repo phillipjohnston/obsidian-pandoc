@@ -22,7 +22,7 @@ import { FileSystemAdapter, Notice, TFile } from 'obsidian';
 import PandocPlugin from './main';
 import render from './renderer';
 import { PublicationProfile } from './global';
-import { TRANSFORM_REGISTRY } from './publication-transforms';
+import { TRANSFORM_REGISTRY, validateWordPressHTML } from './publication-transforms';
 
 // ── Git helpers ───────────────────────────────────────────────────────────────
 
@@ -163,6 +163,20 @@ async function renderAndTransform(
             html = fn(html);
         } catch (e) {
             console.warn('Pandoc plugin: custom transform threw:', e);
+        }
+    }
+
+    // 8. Sanity-check WordPress output so problems surface before commit review
+    if (enabledIds.has('convertWordPressBlocks')) {
+        const warnings = validateWordPressHTML(html);
+        if (warnings.length) {
+            console.warn('Pandoc plugin: publication HTML warnings:\n' + warnings.join('\n'));
+            new Notice(
+                `Publish check found ${warnings.length} issue(s):\n• ` +
+                warnings.slice(0, 5).join('\n• ') +
+                (warnings.length > 5 ? `\n…and ${warnings.length - 5} more (see console)` : ''),
+                30000
+            );
         }
     }
 
